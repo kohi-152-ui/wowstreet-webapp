@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>WOWSTREET Arena · BTC/USDT</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B0F1A;
+    --surface:#131A2B;
+    --surface-2:#182238;
+    --border:#232C42;
+    --text:#EDF1FA;
+    --text-dim:#7C87A8;
+    --long:#34D399;
+    --short:#FB7185;
+    --warn:#FBBF24;
+    --brand:#6366F1;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; padding:0; height:100%; background:var(--bg); color:var(--text);
+    font-family:'Manrope',sans-serif; overflow:hidden;
+  }
+  .mono{ font-family:'JetBrains Mono', monospace; }
+
+  #app{ display:flex; flex-direction:column; height:100vh; height:100dvh; }
+
+  /* ---------- Header ---------- */
+  header{
+    padding:14px 16px 10px; flex-shrink:0;
+    border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+  }
+  .brand{
+    display:flex; align-items:center; gap:6px;
+    font-size:11px; font-weight:700; letter-spacing:.12em;
+    color:var(--text-dim); text-transform:uppercase; margin-bottom:8px;
+  }
+  .brand b{ color:var(--brand); }
+  .ticker-row{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .pulse-dot{
+    width:9px; height:9px; border-radius:50%; background:var(--long);
+    box-shadow:0 0 0 0 rgba(52,211,153,.6);
+    flex-shrink:0; margin-right:2px; align-self:center;
+  }
+  .pulse-dot.down{ background:var(--short); box-shadow:0 0 0 0 rgba(251,113,133,.6); }
+  .pulse-dot.pulse{ animation:pulse .6s ease-out; }
+  @keyframes pulse{
+    0%{ box-shadow:0 0 0 0 rgba(52,211,153,.55); }
+    70%{ box-shadow:0 0 0 10px rgba(52,211,153,0); }
+    100%{ box-shadow:0 0 0 0 rgba(52,211,153,0); }
+  }
+  .pulse-dot.down.pulse{ animation-name:pulseDown; }
+  @keyframes pulseDown{
+    0%{ box-shadow:0 0 0 0 rgba(251,113,133,.55); }
+    70%{ box-shadow:0 0 0 10px rgba(251,113,133,0); }
+    100%{ box-shadow:0 0 0 0 rgba(251,113,133,0); }
+  }
+  #price{ font-size:28px; font-weight:700; letter-spacing:-.01em; }
+  #price.tick-up{ color:var(--long); }
+  #price.tick-down{ color:var(--short); }
+  #change-chip{
+    font-size:13px; font-weight:700; padding:3px 9px; border-radius:999px;
+    background:var(--surface-2); border:1px solid var(--border);
+  }
+  #change-chip.up{ color:var(--long); border-color:rgba(52,211,153,.35); }
+  #change-chip.down{ color:var(--short); border-color:rgba(251,113,133,.35); }
+  #symbol-label{ font-size:12px; color:var(--text-dim); font-weight:500; }
+
+  /* ---------- Chart ---------- */
+  #chart-wrap{ position:relative; flex:1; min-height:0; }
+  #chart{ position:absolute; inset:0; }
+  #chart-status{
+    position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    font-size:12px; color:var(--text-dim); background:rgba(19,26,43,.85);
+    padding:6px 12px; border-radius:8px; border:1px solid var(--border);
+  }
+
+  /* ---------- Position card ---------- */
+  #position-card{
+    display:none; flex-shrink:0; margin:0 12px 12px; padding:14px 16px;
+    border-radius:16px; background:rgba(19,26,43,.9); backdrop-filter:blur(10px);
+    border:1px solid var(--border);
+  }
+  #position-card.long{ border-color:rgba(52,211,153,.4); }
+  #position-card.short{ border-color:rgba(251,113,133,.4); }
+  .pc-top{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .side-badge{
+    font-size:12px; font-weight:800; padding:4px 10px; border-radius:8px; letter-spacing:.03em;
+  }
+  .side-badge.long{ background:rgba(52,211,153,.15); color:var(--long); }
+  .side-badge.short{ background:rgba(251,113,133,.15); color:var(--short); }
+  .pc-lev{ font-size:12px; color:var(--text-dim); }
+  .pc-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+  .pc-field .label{ font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.08em; margin-bottom:2px; }
+  .pc-field .value{ font-size:14px; font-weight:600; }
+  #pnl-usd.pos, #pnl-pct.pos{ color:var(--long); }
+  #pnl-usd.neg, #pnl-pct.neg{ color:var(--short); }
+  #close-btn{
+    width:100%; padding:12px; border:none; border-radius:12px; font-size:14px; font-weight:800;
+    background:var(--short); color:#1a0a0d; cursor:pointer; letter-spacing:.02em;
+  }
+  #close-btn:active{ opacity:.8; }
+  #close-hint{ font-size:11px; color:var(--text-dim); text-align:center; margin-top:8px; }
+
+  footer{
+    flex-shrink:0; text-align:center; font-size:10px; color:var(--text-dim);
+    padding:6px 0 10px; letter-spacing:.04em;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">🏛 WOWSTREET <b>ARENA</b></div>
+    <div class="ticker-row">
+      <span class="pulse-dot" id="pulseDot"></span>
+      <span id="price" class="mono">--</span>
+      <span id="change-chip" class="mono">0.00%</span>
+    </div>
+    <div id="symbol-label">BTC/USDT · realtime via Binance</div>
+  </header>
+
+  <div id="chart-wrap">
+    <div id="chart"></div>
+    <div id="chart-status">Đang kết nối biểu đồ...</div>
+  </div>
+
+  <div id="position-card">
+    <div class="pc-top">
+      <span id="pc-side" class="side-badge">LONG</span>
+      <span id="pc-lev" class="pc-lev mono">x1</span>
+    </div>
+    <div class="pc-grid">
+      <div class="pc-field">
+        <div class="label">Giá vào</div>
+        <div class="value mono" id="pc-entry">--</div>
+      </div>
+      <div class="pc-field">
+        <div class="label">Ký quỹ</div>
+        <div class="value mono" id="pc-margin">--</div>
+      </div>
+      <div class="pc-field">
+        <div class="label">PnL</div>
+        <div class="value mono" id="pnl-usd">--</div>
+      </div>
+      <div class="pc-field">
+        <div class="label">PnL %</div>
+        <div class="value mono" id="pnl-pct">--</div>
+      </div>
+    </div>
+    <button id="close-btn">🔻 ĐÓNG VỊ THẾ</button>
+    <div id="close-hint"></div>
+  </div>
+
+  <footer>Mô phỏng học tập · không dùng tiền thật</footer>
+</div>
+
+<script>
+(function(){
+  // ---------- Telegram WebApp setup ----------
+  var tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+  if(tg){ tg.ready(); tg.expand(); }
+
+  // ---------- Position params from URL ----------
+  var qs = new URLSearchParams(window.location.search);
+  var position = null;
+  if(qs.has('side') && qs.has('entry')){
+    position = {
+      side: qs.get('side'),
+      entry: parseFloat(qs.get('entry')),
+      lev: parseInt(qs.get('lev') || '1', 10),
+      margin: parseFloat(qs.get('margin') || '0')
+    };
+  }
+
+  // ---------- Chart setup ----------
+  var chartEl = document.getElementById('chart');
+  var chart = LightweightCharts.createChart(chartEl, {
+    layout: { background: { color: 'transparent' }, textColor: '#7C87A8', fontFamily: 'JetBrains Mono, monospace', fontSize: 11 },
+    grid: { vertLines: { color: 'rgba(35,44,66,0.5)' }, horzLines: { color: 'rgba(35,44,66,0.5)' } },
+    rightPriceScale: { borderColor: '#232C42' },
+    timeScale: { borderColor: '#232C42', timeVisible: true, secondsVisible: false },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+  });
+  var candleSeries = chart.addCandlestickSeries({
+    upColor: '#34D399', downColor: '#FB7185',
+    borderUpColor: '#34D399', borderDownColor: '#FB7185',
+    wickUpColor: '#34D399', wickDownColor: '#FB7185',
+  });
+
+  function resizeChart(){
+    chart.applyOptions({ width: chartEl.clientWidth, height: chartEl.clientHeight });
+  }
+  window.addEventListener('resize', resizeChart);
+  resizeChart();
+
+  var chartStatus = document.getElementById('chart-status');
+
+  // Entry price line for the open position
+  if(position){
+    var lineColor = position.side === 'SHORT' ? '#FB7185' : '#34D399';
+    candleSeries.createPriceLine({
+      price: position.entry, color: lineColor, lineWidth: 1,
+      lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
+      title: 'Entry ' + position.side,
+    });
+  }
+
+  // ---------- Load initial candle history (best-effort) ----------
+  fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=120')
+    .then(function(r){ return r.json(); })
+    .then(function(rows){
+      var data = rows.map(function(k){
+        return { time: Math.floor(k[0]/1000), open:+k[1], high:+k[2], low:+k[3], close:+k[4] };
+      });
+      candleSeries.setData(data);
+      chartStatus.style.display = 'none';
+    })
+    .catch(function(){
+      chartStatus.textContent = 'Không tải được lịch sử — vẫn cập nhật giá live';
+      setTimeout(function(){ chartStatus.style.display='none'; }, 3000);
+    });
+
+  // ---------- Live price + candle stream ----------
+  var priceEl = document.getElementById('price');
+  var pulseDot = document.getElementById('pulseDot');
+  var changeChip = document.getElementById('change-chip');
+
+  var sessionOpenPrice = null;
+  var lastPrice = null;
+
+  function fmtUsd(x){
+    return '$' + x.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  function fmtSignedUsd(x){
+    return (x>=0?'+':'-') + '$' + Math.abs(x).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  function fmtSignedPct(x){
+    return (x>=0?'+':'') + x.toFixed(2) + '%';
+  }
+
+  function updatePriceUI(price){
+    if(sessionOpenPrice === null) sessionOpenPrice = price;
+    var up = lastPrice !== null ? price >= lastPrice : true;
+    lastPrice = price;
+
+    priceEl.textContent = fmtUsd(price);
+    priceEl.className = 'mono ' + (up ? 'tick-up' : 'tick-down');
+
+    pulseDot.className = 'pulse-dot pulse' + (up ? '' : ' down');
+    void pulseDot.offsetWidth; // restart animation
+    pulseDot.classList.add('pulse');
+
+    var changePct = ((price - sessionOpenPrice) / sessionOpenPrice) * 100;
+    changeChip.textContent = fmtSignedPct(changePct);
+    changeChip.className = 'mono ' + (changePct >= 0 ? 'up' : 'down');
+
+    if(position){ updatePositionCard(price); }
+  }
+
+  function updatePositionCard(price){
+    var move = (price - position.entry) / position.entry;
+    if(position.side === 'SHORT') move = -move;
+    var pnlUsd = position.margin * position.lev * move;
+    var pnlPct = position.margin ? (pnlUsd / position.margin * 100) : 0;
+
+    document.getElementById('pnl-usd').textContent = fmtSignedUsd(pnlUsd);
+    document.getElementById('pnl-pct').textContent = fmtSignedPct(pnlPct);
+    document.getElementById('pnl-usd').className = 'value mono ' + (pnlUsd>=0?'pos':'neg');
+    document.getElementById('pnl-pct').className = 'value mono ' + (pnlUsd>=0?'pos':'neg');
+  }
+
+  if(position){
+    var card = document.getElementById('position-card');
+    card.style.display = 'block';
+    card.classList.add(position.side === 'SHORT' ? 'short' : 'long');
+    var sideBadge = document.getElementById('pc-side');
+    sideBadge.textContent = (position.side === 'SHORT' ? '🔴 SHORT' : '🟢 LONG');
+    sideBadge.classList.add(position.side === 'SHORT' ? 'short' : 'long');
+    document.getElementById('pc-lev').textContent = 'x' + position.lev;
+    document.getElementById('pc-entry').textContent = fmtUsd(position.entry);
+    document.getElementById('pc-margin').textContent = fmtUsd(position.margin);
+
+    document.getElementById('close-btn').addEventListener('click', function(){
+      if(tg && tg.sendData){
+        try{
+          tg.sendData(JSON.stringify({ action: 'close_position' }));
+          document.getElementById('close-hint').textContent = 'Đã gửi lệnh đóng, quay lại chat để xem kết quả.';
+        }catch(e){
+          document.getElementById('close-hint').textContent = 'Không gửi được — hãy gõ /close trong chat với bot.';
+        }
+      } else {
+        document.getElementById('close-hint').textContent = 'Hãy gõ /close trong chat với bot để chốt lệnh.';
+      }
+    });
+  }
+
+  // ---------- WebSocket: combined trade + 1m kline stream ----------
+  var ws;
+  function connect(){
+    ws = new WebSocket('wss://stream.binance.com:9443/stream?streams=btcusdt@trade/btcusdt@kline_1m');
+    ws.onmessage = function(evt){
+      var msg = JSON.parse(evt.data);
+      var stream = msg.stream, data = msg.data;
+      if(stream.indexOf('@trade') !== -1){
+        updatePriceUI(parseFloat(data.p));
+      } else if(stream.indexOf('@kline') !== -1){
+        var k = data.k;
+        candleSeries.update({
+          time: Math.floor(k.t/1000), open:+k.o, high:+k.h, low:+k.l, close:+k.c
+        });
+      }
+    };
+    ws.onclose = function(){ setTimeout(connect, 2000); };
+    ws.onerror = function(){ ws.close(); };
+  }
+  connect();
+})();
+</script>
+</body>
+</html>
