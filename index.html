@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>WOWSTREET Arena · BTC/USDT</title>
+<title>WOWSTREET Arena</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -79,6 +79,7 @@
     position:absolute; top:10px; left:50%; transform:translateX(-50%);
     font-size:12px; color:var(--text-dim); background:rgba(19,26,43,.85);
     padding:6px 12px; border-radius:8px; border:1px solid var(--border);
+    z-index: 10;
   }
 
   /* ---------- Position card ---------- */
@@ -101,34 +102,66 @@
   .pc-field .value{ font-size:14px; font-weight:600; }
   #pnl-usd.pos, #pnl-pct.pos{ color:var(--long); }
   #pnl-usd.neg, #pnl-pct.neg{ color:var(--short); }
+  
   #close-btn{
     width:100%; padding:12px; border:none; border-radius:12px; font-size:14px; font-weight:800;
     background:var(--short); color:#1a0a0d; cursor:pointer; letter-spacing:.02em;
+    transition: opacity 0.2s;
   }
   #close-btn:active{ opacity:.8; }
+  #close-btn:disabled { background: #555; color: #999; cursor: not-allowed; }
   #close-hint{ font-size:11px; color:var(--text-dim); text-align:center; margin-top:8px; }
+
+  /* ---------- Action Bar (NEW) ---------- */
+  #action-bar {
+    display: none; /* Chỉ hiện khi mode = ARENA */
+    flex-shrink: 0; padding: 12px 16px; border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .input-row { display: flex; gap: 10px; margin-bottom: 12px; }
+  .input-group { flex: 1; display: flex; align-items: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 0 8px; }
+  .input-group label { font-size: 11px; color: var(--text-dim); font-weight: 700; width: 45px; }
+  .input-group input { 
+    flex: 1; background: transparent; border: none; color: var(--text); 
+    padding: 10px 4px; font-weight: 700; text-align: right; font-family: 'JetBrains Mono', monospace; outline: none;
+  }
+  
+  .btn-row { display: flex; gap: 10px; margin-bottom: 10px; }
+  .btn-action {
+    flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 13px; font-weight: 800; 
+    cursor: pointer; color: #1a0a0d; transition: opacity 0.2s;
+  }
+  .btn-action:active { opacity: 0.8; }
+  .btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
+  
+  .btn-long { background: var(--long); }
+  .btn-short { background: var(--short); }
+  .btn-hedge { background: #60A5FA; } /* Màu xanh lam */
+  .btn-reverse { background: #FBBF24; } /* Màu vàng */
+  
+  #action-hint { font-size: 12px; color: var(--text-dim); text-align: center; margin-top: 4px; font-weight: 500; height: 16px; }
 
   footer{
     flex-shrink:0; text-align:center; font-size:10px; color:var(--text-dim);
-    padding:6px 0 10px; letter-spacing:.04em;
+    padding:6px 0 10px; background: var(--surface); letter-spacing:.04em;
   }
 </style>
 </head>
 <body>
 <div id="app">
   <header>
-    <div class="brand">🏛 WOWSTREET <b>ARENA</b></div>
+    <div class="brand" id="brand-header">🏛 WOWSTREET <b>ARENA</b></div>
     <div class="ticker-row">
       <span class="pulse-dot" id="pulseDot"></span>
       <span id="price" class="mono">--</span>
       <span id="change-chip" class="mono">0.00%</span>
     </div>
-    <div id="symbol-label">BTC/USDT · realtime via Binance</div>
+    <div id="symbol-label">Đang tải dữ liệu...</div>
   </header>
 
   <div id="chart-wrap">
     <div id="chart"></div>
-    <div id="chart-status">Đang kết nối biểu đồ...</div>
+    <div id="chart-status">Đang kết nối hệ thống...</div>
   </div>
 
   <div id="position-card">
@@ -158,6 +191,29 @@
     <div id="close-hint"></div>
   </div>
 
+  <!-- THANH CÔNG CỤ TƯƠNG TÁC (Chỉ hiện khi ở Arena Mode) -->
+  <div id="action-bar">
+    <div class="input-row">
+      <div class="input-group">
+        <label>SIZE%</label>
+        <input type="number" id="input-size" value="20" min="1" max="100">
+      </div>
+      <div class="input-group">
+        <label>LEV x</label>
+        <input type="number" id="input-lev" value="1" min="1" max="100">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button id="btn-long" class="btn-action btn-long">🟢 LONG</button>
+      <button id="btn-short" class="btn-action btn-short">🔴 SHORT</button>
+    </div>
+    <div class="btn-row">
+      <button id="btn-hedge" class="btn-action btn-hedge">🛡 HEDGE</button>
+      <button id="btn-reverse" class="btn-action btn-reverse">🔄 REVERSE</button>
+    </div>
+    <div id="action-hint">Sẵn sàng giao dịch.</div>
+  </div>
+
   <footer>Mô phỏng học tập · không dùng tiền thật</footer>
 </div>
 
@@ -166,6 +222,41 @@
   // ---------- Telegram WebApp setup ----------
   var tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
   if(tg){ tg.ready(); tg.expand(); }
+
+  // ---------- API Gọi Backend tự thiết kế ----------
+  async function apiCall(endpoint, method = 'GET', body = null) {
+    if (!tg || !tg.initData) {
+      throw new Error("Không tìm thấy dữ liệu Telegram. Hãy mở từ trong App.");
+    }
+    
+    const options = {
+      method: method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Telegram-Init-Data': tg.initData
+      }
+    };
+    
+    if (body) {
+      options.body = JSON.stringify(body);
+    }
+    
+    const response = await fetch(endpoint, options);
+    return await response.json();
+  }
+
+  // ---------- Format số động ----------
+  function fmtUsd(x){
+    let fraction = x < 0.1 ? 6 : (x < 10 ? 4 : 2);
+    return '$' + x.toLocaleString('en-US', {minimumFractionDigits:fraction, maximumFractionDigits:fraction});
+  }
+  function fmtSignedUsd(x){
+    let fraction = 2;
+    return (x>=0?'+':'-') + '$' + Math.abs(x).toLocaleString('en-US', {minimumFractionDigits:fraction, maximumFractionDigits:fraction});
+  }
+  function fmtSignedPct(x){
+    return (x>=0?'+':'') + x.toFixed(2) + '%';
+  }
 
   // ---------- Position params from URL ----------
   var qs = new URLSearchParams(window.location.search);
@@ -177,6 +268,59 @@
       lev: parseInt(qs.get('lev') || '1', 10),
       margin: parseFloat(qs.get('margin') || '0')
     };
+  }
+
+  // ---------- Sync state from API ----------
+  async function syncState() {
+    try {
+      const state = await apiCall('/api/state', 'GET');
+      if (state.ok && state.in_room && state.mode === 'ARENA') {
+        // Update position from API state
+        if (state.position) {
+          position = {
+            side: state.position.side,
+            entry: state.position.entry_price,
+            lev: state.position.leverage,
+            margin: state.position.margin
+          };
+          updatePositionCardUI();
+        } else {
+          position = null;
+          hidePositionCard();
+        }
+      }
+    } catch (e) {
+      console.error("Lỗi đồng bộ trạng thái:", e);
+    }
+  }
+
+  function updatePositionCardUI() {
+    if (!position) {
+      hidePositionCard();
+      return;
+    }
+
+    var card = document.getElementById('position-card');
+    card.style.display = 'block';
+    card.classList.add(position.side === 'SHORT' ? 'short' : 'long');
+    
+    var sideBadge = document.getElementById('pc-side');
+    sideBadge.textContent = (position.side === 'SHORT' ? '🔴 SHORT' : '🟢 LONG');
+    sideBadge.classList.add(position.side === 'SHORT' ? 'short' : 'long');
+    
+    document.getElementById('pc-lev').textContent = 'x' + position.lev;
+    document.getElementById('pc-entry').textContent = fmtUsd(position.entry);
+    document.getElementById('pc-margin').textContent = fmtUsd(position.margin);
+    
+    // Update PnL with current price
+    if (lastPrice) {
+      updatePositionCard(lastPrice);
+    }
+  }
+
+  function hidePositionCard() {
+    var card = document.getElementById('position-card');
+    card.style.display = 'none';
   }
 
   // ---------- Chart setup ----------
@@ -202,7 +346,7 @@
 
   var chartStatus = document.getElementById('chart-status');
 
-  // Entry price line for the open position
+  // Vẽ vạch giá Entry
   if(position){
     var lineColor = position.side === 'SHORT' ? '#FB7185' : '#34D399';
     candleSeries.createPriceLine({
@@ -212,38 +356,13 @@
     });
   }
 
-  // ---------- Load initial candle history (best-effort) ----------
-  fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=120')
-    .then(function(r){ return r.json(); })
-    .then(function(rows){
-      var data = rows.map(function(k){
-        return { time: Math.floor(k[0]/1000), open:+k[1], high:+k[2], low:+k[3], close:+k[4] };
-      });
-      candleSeries.setData(data);
-      chartStatus.style.display = 'none';
-    })
-    .catch(function(){
-      chartStatus.textContent = 'Không tải được lịch sử — vẫn cập nhật giá live';
-      setTimeout(function(){ chartStatus.style.display='none'; }, 3000);
-    });
-
-  // ---------- Live price + candle stream ----------
+  // ---------- Live price UI Updater ----------
   var priceEl = document.getElementById('price');
   var pulseDot = document.getElementById('pulseDot');
   var changeChip = document.getElementById('change-chip');
 
   var sessionOpenPrice = null;
   var lastPrice = null;
-
-  function fmtUsd(x){
-    return '$' + x.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-  }
-  function fmtSignedUsd(x){
-    return (x>=0?'+':'-') + '$' + Math.abs(x).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-  }
-  function fmtSignedPct(x){
-    return (x>=0?'+':'') + x.toFixed(2) + '%';
-  }
 
   function updatePriceUI(price){
     if(sessionOpenPrice === null) sessionOpenPrice = price;
@@ -254,7 +373,7 @@
     priceEl.className = 'mono ' + (up ? 'tick-up' : 'tick-down');
 
     pulseDot.className = 'pulse-dot pulse' + (up ? '' : ' down');
-    void pulseDot.offsetWidth; // restart animation
+    void pulseDot.offsetWidth; 
     pulseDot.classList.add('pulse');
 
     var changePct = ((price - sessionOpenPrice) / sessionOpenPrice) * 100;
@@ -276,51 +395,191 @@
     document.getElementById('pnl-pct').className = 'value mono ' + (pnlUsd>=0?'pos':'neg');
   }
 
+  // Gắn UI Position Card & Nút đóng
+  var closeBtn = document.getElementById('close-btn');
+  var closeHint = document.getElementById('close-hint');
+
+  // Initialize position card from URL params if available
   if(position){
-    var card = document.getElementById('position-card');
-    card.style.display = 'block';
-    card.classList.add(position.side === 'SHORT' ? 'short' : 'long');
-    var sideBadge = document.getElementById('pc-side');
-    sideBadge.textContent = (position.side === 'SHORT' ? '🔴 SHORT' : '🟢 LONG');
-    sideBadge.classList.add(position.side === 'SHORT' ? 'short' : 'long');
-    document.getElementById('pc-lev').textContent = 'x' + position.lev;
-    document.getElementById('pc-entry').textContent = fmtUsd(position.entry);
-    document.getElementById('pc-margin').textContent = fmtUsd(position.margin);
+    updatePositionCardUI();
+  }
 
-    document.getElementById('close-btn').addEventListener('click', function(){
-      if(tg && tg.sendData){
-        try{
-          tg.sendData(JSON.stringify({ action: 'close_position' }));
-          document.getElementById('close-hint').textContent = 'Đã gửi lệnh đóng, quay lại chat để xem kết quả.';
-        }catch(e){
-          document.getElementById('close-hint').textContent = 'Không gửi được — hãy gõ /close trong chat với bot.';
-        }
+  closeBtn.addEventListener('click', async function(){
+    closeBtn.disabled = true;
+    closeBtn.textContent = '⏳ ĐANG XỬ LÝ...';
+    closeHint.textContent = 'Đang gửi lệnh đóng...';
+    
+    try {
+      const data = await apiCall('/api/close', 'POST');
+      if (data.ok) {
+        closeHint.textContent = '✅ ' + data.message;
+        closeHint.style.color = 'var(--long)';
+        closeBtn.textContent = 'ĐÃ CHỐT XONG';
+        // Sync state again after closing
+        await syncState();
+        setTimeout(() => { if(tg) tg.close(); }, 2000);
       } else {
-        document.getElementById('close-hint').textContent = 'Hãy gõ /close trong chat với bot để chốt lệnh.';
+        closeHint.textContent = '⚠️ ' + (data.message || 'Lỗi không xác định');
+        closeHint.style.color = 'var(--warn)';
+        closeBtn.disabled = false;
+        closeBtn.textContent = '🔻 ĐÓNG VỊ THẾ';
       }
-    });
+    } catch (error) {
+      closeHint.textContent = '❌ Lỗi kết nối: ' + error.message;
+      closeHint.style.color = 'var(--warn)';
+      closeBtn.disabled = false;
+      closeBtn.textContent = '🔻 ĐÓNG VỊ THẾ';
+    }
+  });
+
+  // ==========================================
+  // XỬ LÝ SỰ KIỆN CHO THANH CÔNG CỤ ACTION BAR
+  // ==========================================
+  const actionHint = document.getElementById('action-hint');
+  const inputSize = document.getElementById('input-size');
+  const inputLev = document.getElementById('input-lev');
+
+  async function executeOrder(endpoint, body, btnEl, originalText) {
+    btnEl.disabled = true;
+    btnEl.innerText = '⏳...';
+    actionHint.textContent = 'Đang gửi lệnh...';
+    actionHint.style.color = 'var(--text-dim)';
+    
+    try {
+      const res = await apiCall(endpoint, 'POST', body);
+      if (res.ok) {
+        actionHint.textContent = '✅ ' + res.message;
+        actionHint.style.color = 'var(--long)';
+        // Sync state after placing order
+        await syncState();
+      } else {
+        actionHint.textContent = '⚠️ ' + (res.message || 'Lỗi');
+        actionHint.style.color = 'var(--warn)';
+      }
+    } catch (e) {
+      actionHint.textContent = '❌ Lỗi kết nối!';
+      actionHint.style.color = 'var(--warn)';
+    }
+    
+    btnEl.disabled = false;
+    btnEl.innerText = originalText;
+    setTimeout(() => { 
+        if(actionHint.textContent.includes('✅')) {
+            actionHint.textContent = 'Sẵn sàng giao dịch.'; 
+            actionHint.style.color = 'var(--text-dim)';
+        }
+    }, 4000);
   }
 
-  // ---------- WebSocket: combined trade + 1m kline stream ----------
-  var ws;
-  function connect(){
-    ws = new WebSocket('wss://stream.binance.com:9443/stream?streams=btcusdt@trade/btcusdt@kline_1m');
-    ws.onmessage = function(evt){
-      var msg = JSON.parse(evt.data);
-      var stream = msg.stream, data = msg.data;
-      if(stream.indexOf('@trade') !== -1){
-        updatePriceUI(parseFloat(data.p));
-      } else if(stream.indexOf('@kline') !== -1){
-        var k = data.k;
-        candleSeries.update({
-          time: Math.floor(k.t/1000), open:+k.o, high:+k.h, low:+k.l, close:+k.c
-        });
+  document.getElementById('btn-long').onclick = function() {
+    executeOrder('/api/order', {side: 'LONG', size_pct: parseFloat(inputSize.value)||20, leverage: parseFloat(inputLev.value)||1}, this, '🟢 LONG');
+  };
+  document.getElementById('btn-short').onclick = function() {
+    executeOrder('/api/order', {side: 'SHORT', size_pct: parseFloat(inputSize.value)||20, leverage: parseFloat(inputLev.value)||1}, this, '🔴 SHORT');
+  };
+  document.getElementById('btn-hedge').onclick = function() {
+    executeOrder('/api/hedge', null, this, '🛡 HEDGE');
+  };
+  document.getElementById('btn-reverse').onclick = function() {
+    executeOrder('/api/reverse', null, this, '🔄 REVERSE');
+  };
+
+
+  // ==========================================
+  // KHỞI CHẠY HỆ THỐNG DỮ LIỆU ĐỘNG (ROUTER)
+  // ==========================================
+  async function initDataStream() {
+    try {
+      // Sync state first to get current position
+      await syncState();
+      
+      const config = await apiCall('/api/klines', 'GET');
+      
+      if (!config.ok) {
+        chartStatus.textContent = 'Vui lòng vào Group và tạo phòng /tradeindex hoặc /indexbattle trước!';
+        return;
       }
-    };
-    ws.onclose = function(){ setTimeout(connect, 2000); };
-    ws.onerror = function(){ ws.close(); };
+
+      if (config.mode === 'INDEX') {
+        // --- CHẾ ĐỘ INDEX BATTLE ---
+        document.getElementById('brand-header').innerHTML = '📈 WOWSTREET <b>INDEX</b>';
+        document.getElementById('symbol-label').textContent = 'Danh mục 5 tài sản · Lấy giá tổng hợp';
+        document.getElementById('action-bar').style.display = 'none'; // Ẩn Action Bar khi đua danh mục
+        
+        if (config.data && config.data.length > 0) {
+            candleSeries.setData(config.data);
+            updatePriceUI(config.data[config.data.length - 1].close);
+        }
+        chartStatus.style.display = 'none';
+
+        setInterval(async () => {
+            try {
+                const refresh = await apiCall('/api/klines', 'GET');
+                if (refresh.ok && refresh.data && refresh.data.length > 0) {
+                    const lastCandle = refresh.data[refresh.data.length - 1];
+                    candleSeries.update(lastCandle);
+                    updatePriceUI(lastCandle.close);
+                }
+            } catch (e) {
+                console.error("Lỗi cập nhật Index Chart", e);
+            }
+        }, 5000);
+
+      } else {
+        // --- CHẾ ĐỘ ARENA ĐA TÀI SẢN ---
+        const symbol = config.symbol || 'BTCUSDT';
+        document.getElementById('symbol-label').textContent = symbol.replace('USDT', '') + '/USDT · realtime via Binance';
+        document.getElementById('action-bar').style.display = 'block'; // Hiện Action Bar để trade
+        
+        try {
+            const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1m&limit=120`);
+            const rows = await res.json();
+            var data = rows.map(function(k){
+                return { time: Math.floor(k[0]/1000), open:+k[1], high:+k[2], low:+k[3], close:+k[4] };
+            });
+            candleSeries.setData(data);
+            chartStatus.style.display = 'none';
+        } catch (e) {
+            chartStatus.textContent = 'Không tải được lịch sử Binance — vẫn cập nhật giá live';
+            setTimeout(function(){ chartStatus.style.display='none'; }, 3000);
+        }
+
+        function connectBinanceWS(){
+            const symLower = symbol.toLowerCase();
+            const wsUrl = `wss://stream.binance.com:9443/stream?streams=${symLower}@trade/${symLower}@kline_1m`;
+            const ws = new WebSocket(wsUrl);
+            ws.onmessage = function(evt){
+                try {
+                    var msg = JSON.parse(evt.data);
+                    // Check if msg.stream exists before accessing it
+                    if (msg && msg.stream) {
+                        var stream = msg.stream, d = msg.data;
+                        if(stream.indexOf('@trade') !== -1){
+                            updatePriceUI(parseFloat(d.p));
+                        } else if(stream.indexOf('@kline') !== -1){
+                            var k = d.k;
+                            candleSeries.update({
+                                time: Math.floor(k.t/1000), open:+k.o, high:+k.h, low:+k.l, close:+k.c
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.error("Lỗi xử lý tin nhắn WebSocket:", e);
+                }
+            };
+            ws.onclose = function(){ setTimeout(connectBinanceWS, 2000); };
+            ws.onerror = function(){ ws.close(); };
+        }
+        connectBinanceWS();
+      }
+    } catch (error) {
+      chartStatus.textContent = 'Lỗi kết nối Server: ' + error.message;
+    }
   }
-  connect();
+
+  // Kích nổ 🚀
+  initDataStream();
+
 })();
 </script>
 </body>
