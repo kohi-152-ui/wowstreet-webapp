@@ -114,7 +114,7 @@
 
   /* ---------- Action Bar (NEW) ---------- */
   #action-bar {
-    display: none; /* Chỉ hiện khi mode = ARENA */
+    display: block; /* Mặc định hiển thị, sẽ được điều khiển bởi JS */
     flex-shrink: 0; padding: 12px 16px; border-top: 1px solid var(--border);
     background: var(--surface);
   }
@@ -225,24 +225,52 @@
 
   // ---------- API Gọi Backend tự thiết kế ----------
   async function apiCall(endpoint, method = 'GET', body = null) {
-    if (!tg || !tg.initData) {
-      throw new Error("Không tìm thấy dữ liệu Telegram. Hãy mở từ trong App.");
-    }
+    // Sử dụng URL tương đối - sẽ tự động trỏ đến cùng domain với file HTML
+    const url = endpoint.startsWith('http') ? endpoint : endpoint;
     
     const options = {
       method: method,
       headers: {
-        'Content-Type': 'application/json',
-        'X-Telegram-Init-Data': tg.initData
+        'Content-Type': 'application/json'
       }
     };
+    
+    // Chỉ thêm header Telegram nếu có initData (trong Telegram App)
+    if (tg && tg.initData) {
+      options.headers['X-Telegram-Init-Data'] = tg.initData;
+    } else {
+      console.warn("Không có Telegram initData - có thể đang test local");
+      // For local testing, you might want to add a debug header
+      options.headers['X-Debug-Mode'] = 'true';
+    }
     
     if (body) {
       options.body = JSON.stringify(body);
     }
     
-    const response = await fetch(endpoint, options);
-    return await response.json();
+    try {
+      const response = await fetch(url, options);
+      
+      // Check if response is OK
+      if (!response.ok) {
+        const text = await response.text();
+        console.error(`HTTP error! status: ${response.status}`, text);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      // Check content type to ensure it's JSON
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error("Response không phải JSON:", text);
+        throw new Error("Server trả về không phải JSON. Response: " + text.substring(0, 200));
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error("API Call error:", error);
+      throw error;
+    }
   }
 
   // ---------- Format số động ----------
@@ -274,23 +302,39 @@
   async function syncState() {
     try {
       const state = await apiCall('/api/state', 'GET');
-      if (state.ok && state.in_room && state.mode === 'ARENA') {
-        // Update position from API state
-        if (state.position) {
-          position = {
-            side: state.position.side,
-            entry: state.position.entry_price,
-            lev: state.position.leverage,
-            margin: state.position.margin
-          };
-          updatePositionCardUI();
-        } else {
-          position = null;
-          hidePositionCard();
+      if (state.ok && state.in_room) {
+        // Hiển thị action bar khi ở ARENA mode
+        if (state.mode === 'ARENA') {
+          document.getElementById('action-bar').style.display = 'block';
+          document.getElementById('brand-header').innerHTML = '🏛 WOWSTREET <b>ARENA</b>';
+          
+          // Update position from API state
+          if (state.position) {
+            position = {
+              side: state.position.side,
+              entry: state.position.entry_price,
+              lev: state.position.leverage,
+              margin: state.position.margin
+            };
+            updatePositionCardUI();
+          } else {
+            position = null;
+            hidePositionCard();
+          }
+        } else if (state.mode === 'INDEX') {
+          // Ẩn action bar khi ở INDEX mode
+          document.getElementById('action-bar').style.display = 'none';
+          document.getElementById('brand-header').innerHTML = '📈 WOWSTREET <b>INDEX</b>';
         }
+      } else {
+        // Không có phòng nào, ẩn action bar
+        document.getElementById('action-bar').style.display = 'none';
+        document.getElementById('brand-header').innerHTML = '🏛 WOWSTREET <b>ARENA</b>';
       }
     } catch (e) {
       console.error("Lỗi đồng bộ trạng thái:", e);
+      // Mặc định hiển thị action bar khi có lỗi
+      document.getElementById('action-bar').style.display = 'block';
     }
   }
 
@@ -490,6 +534,37 @@
   // ==========================================
   async function initDataStream() {
     try {
+      // Mặc định hiển thị action bar trước khi sync state
+      document.getElementById('action-bar').style.display = 'block';
+      
+      // Test connection first
+      console.log("Testing API connection to /api/state...");
+      try {
+        const testResponse = await fetch('/api/state', {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        console.log("Test response status:", testResponse.status);
+        const testText = await testResponse.text();
+        console.log("Test response (first 200 chars):", testText.substring(0, 200));
+        
+        if (testResponse.status === 404) {
+          chartStatus.textContent = '❌ API Server chưa chạy! Hãy chạy: python run.py';
+          console.error("API endpoint 404 - server might not be running");
+          return;
+        }
+        
+        if (!testText || testText.includes('<!DOCTYPE')) {
+          chartStatus.textContent = '❌ API Server trả về HTML thay vì JSON. Kiểm tra server.';
+          console.error("API returning HTML instead of JSON");
+          return;
+        }
+      } catch (testError) {
+        console.error("API connection test failed:", testError);
+        chartStatus.textContent = '❌ Lỗi kết nối API: ' + testError.message + '. Hãy chạy: python run.py';
+        return;
+      }
+      
       // Sync state first to get current position
       await syncState();
       
@@ -530,6 +605,7 @@
         const symbol = config.symbol || 'BTCUSDT';
         document.getElementById('symbol-label').textContent = symbol.replace('USDT', '') + '/USDT · realtime via Binance';
         document.getElementById('action-bar').style.display = 'block'; // Hiện Action Bar để trade
+        document.getElementById('brand-header').innerHTML = '🏛 WOWSTREET <b>ARENA</b>';
         
         try {
             const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1m&limit=120`);
