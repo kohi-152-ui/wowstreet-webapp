@@ -239,9 +239,9 @@
     if (tg && tg.initData) {
       options.headers['X-Telegram-Init-Data'] = tg.initData;
     } else {
-      console.warn("Không có Telegram initData - có thể đang test local");
-      // For local testing, you might want to add a debug header
-      options.headers['X-Debug-Mode'] = 'true';
+      console.warn("Không có Telegram initData - đang dùng debug mode");
+      // For local testing, add debug header
+      options.headers['X-Telegram-Init-Data'] = 'debug-mode';
     }
     
     if (body) {
@@ -537,31 +537,31 @@
       // Mặc định hiển thị action bar trước khi sync state
       document.getElementById('action-bar').style.display = 'block';
       
-      // Test connection first
-      console.log("Testing API connection to /api/state...");
+      // Test connection to health endpoint first
+      console.log("Testing API connection to /api/health...");
       try {
-        const testResponse = await fetch('/api/state', {
+        const healthResponse = await fetch('/api/health', {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' }
         });
-        console.log("Test response status:", testResponse.status);
-        const testText = await testResponse.text();
-        console.log("Test response (first 200 chars):", testText.substring(0, 200));
+        console.log("Health response status:", healthResponse.status);
         
-        if (testResponse.status === 404) {
+        if (healthResponse.status === 404) {
           chartStatus.textContent = '❌ API Server chưa chạy! Hãy chạy: python run.py';
           console.error("API endpoint 404 - server might not be running");
           return;
         }
         
-        if (!testText || testText.includes('<!DOCTYPE')) {
-          chartStatus.textContent = '❌ API Server trả về HTML thay vì JSON. Kiểm tra server.';
-          console.error("API returning HTML instead of JSON");
-          return;
+        if (healthResponse.ok) {
+          const healthData = await healthResponse.json();
+          console.log("API Health check passed:", healthData);
+          chartStatus.textContent = '✅ API Server đã kết nối - Đang tải dữ liệu...';
+        } else {
+          throw new Error(`Health check failed: ${healthResponse.status}`);
         }
-      } catch (testError) {
-        console.error("API connection test failed:", testError);
-        chartStatus.textContent = '❌ Lỗi kết nối API: ' + testError.message + '. Hãy chạy: python run.py';
+      } catch (healthError) {
+        console.error("API health check failed:", healthError);
+        chartStatus.textContent = '❌ Lỗi kết nối API: ' + healthError.message + '. Hãy chạy: python run.py';
         return;
       }
       
